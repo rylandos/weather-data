@@ -20,7 +20,7 @@ public class WeatherDataLoader {
 	 */
 	public static void main(String[] args) throws IOException {
 		// Change path if necessary - or read in from args or properties file
-		Path sourceDir = Paths.get("/Replace/Me");
+		Path sourceDir = Paths.get("/Users/ryland/Documents/Java/weather-data/Source");
 		
 		if (Files.exists(sourceDir)) {			
 			List<Path> monthFiles = new ArrayList<Path>();
@@ -28,7 +28,12 @@ public class WeatherDataLoader {
 			// Look in this directory only with a depth of one
 			Files.walk(sourceDir, 1).filter(f -> f.toString().endsWith(".csv")).forEach(p -> monthFiles.add(p));
 			
-			summariseData(monthFiles);
+			// Summarise monthly weather statistics and print
+			List<MonthStatistics> monthStats = calculateMonthStatistics(monthFiles);
+			printStats(monthStats);
+			
+			// Write data to a file
+			writeDailyStats(monthStats, Paths.get("/Users/ryland/Documents/Java/weather-data/Output"));
 		}
 	}
 	
@@ -58,18 +63,59 @@ public class WeatherDataLoader {
 	 * Get summary statistics for an input list of data files
 	 * @param files - CSV files as exported from Netatmo
 	 */
-	public static void summariseData(List<Path> files) {
+	public static List<MonthStatistics> calculateMonthStatistics(List<Path> files) {
 		List<MonthStatistics> monthStats = new ArrayList<MonthStatistics>();
 		
 		// For each file, get the data as Reading objects, then calculate statistics
 		files.forEach(f -> { List<Reading> r = readMonthData(f); 
-		MonthStatistics s = getMonthStatistics (r);
+		MonthStatistics s = getMonthStatistics(r);
 		monthStats.add(s);});
 		
+		return monthStats;
+	}
+	
+	/**
+	 * Sort month statistics by date and print the summary data
+	 * @param monthStats
+	 */
+	public static void printStats(List<MonthStatistics> monthStats) {
 		// Print statistics for each month in order
-		monthStats.stream().sorted((m1, m2) -> m1.getMonth().compareTo(m2.getMonth())).forEach(s -> s.printStatistics());
+		Comparator<MonthStatistics> yearComparison = Comparator.comparing(MonthStatistics::getYear);
+		Comparator<MonthStatistics> monthComparison = Comparator.comparing(MonthStatistics::getMonth);
+		Comparator<MonthStatistics> yearMonthComparison = yearComparison.thenComparing(monthComparison);
+		monthStats.stream().sorted(yearMonthComparison).forEach(s -> s.printStatistics());
+	}
+	
+	public static void writeDailyStats(List<MonthStatistics> monthStats, Path targetDir) {
+		// Make a map of stats grouped by year
+		Map<Integer, List<MonthStatistics>> groupedStats = new HashMap<>();
+		List<Integer> years = monthStats.stream().map(m -> m.getYear()).collect(Collectors.toList());
+		years.forEach(y -> {
+			groupedStats.put(y, monthStats.stream().filter(m -> m.getYear() == y).collect(Collectors.toList()));
+		});
 		
-		// Alternative or additional steps possible here, e.g. write statistics into a file
+		groupedStats.forEach((y, ms) -> {
+			System.out.println("High temperatures for year " + y + ":");
+			Path highTempsFile = Paths.get(targetDir.toString(), y.toString() + "_highs.csv");
+			Path lowTempsFile = Paths.get(targetDir.toString(), y.toString() + "_lows.csv");
+			List<String> highLines = new ArrayList<>();
+			List<String> lowLines = new ArrayList<>();
+			
+			ms.stream().sorted(Comparator.comparing(MonthStatistics::getMonth)).forEach(m -> {
+				StringBuilder highline = new StringBuilder();
+				StringBuilder lowline = new StringBuilder();
+				m.getHighTemps().forEach((d, t) -> highline.append(t + ", "));
+				m.getLowTemps().forEach((d, t) -> lowline.append(t + ", "));
+				highLines.add(highline.toString());
+				lowLines.add(lowline.toString());
+				System.out.println(highline);
+			});
+			try {
+				Files.write(highTempsFile, highLines);
+				Files.write(lowTempsFile, lowLines);
+			} catch (IOException e) {}
+			System.out.println();
+		});
 	}
 	
 	/**

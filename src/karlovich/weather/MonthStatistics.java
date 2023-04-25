@@ -19,6 +19,7 @@ public class MonthStatistics {
 	private double averageLow;	
 	private double lowestHigh;
 	private double highestLow;
+	private int frostDays;
 	
 	private Map<Integer, Double> highTemps;
 	private Map<Integer, Double> lowTemps;
@@ -36,6 +37,14 @@ public class MonthStatistics {
 	
 	public int getYear() {
 		return theYear;
+	}
+	
+	public Map<Integer, Double> getHighTemps() {
+		return highTemps;
+	}
+	
+	public Map<Integer, Double> getLowTemps() {
+		return lowTemps;
 	}
 	
 	public static DecimalFormat df = new DecimalFormat("##.#");
@@ -67,6 +76,7 @@ public class MonthStatistics {
 		averageHumidity = avgH;
 		theMonth = month;
 		theYear = year;
+		frostDays = (int) lowTemps.values().stream().filter(d -> d < 0.0).count();
 		
 		// Calculate additional fields
 		averageHigh = getAverageTemp(highTemps);
@@ -135,6 +145,10 @@ public class MonthStatistics {
 		System.out.println("Minimum temperature: " + minimumTemp);
 		System.out.println("Coldest day: " + lowestHigh);
 		System.out.println("Warmest night: " + highestLow);
+		System.out.println("Frost days: " + frostDays);
+		System.out.println("High temperatures: "); highTemps.values().stream().forEach(v -> System.out.print(v + ", "));
+		System.out.println();
+		System.out.println("Low temperatures: "); lowTemps.values().stream().forEach(v -> System.out.print(v + ", "));
 		System.out.println();
 		System.out.println("---HUMIDITY---");
 		System.out.println("Average humidity: " + df.format(averageHumidity));
