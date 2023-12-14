@@ -31,6 +31,16 @@ public class Reading{
 		return timestamp.getDayOfMonth();
 	}
 	
+	public int getMetDay() {
+		if (timestamp.getHour() < 10) {
+			// Consider this reading to be part of the previous meteorological day, likely containing the overnight low
+			return timestamp.minusDays(1).getDayOfMonth();
+		}
+		else {
+			return getDay();
+		}
+	}
+	
 	public double getTemperature() {
 		return temperature;
 	}

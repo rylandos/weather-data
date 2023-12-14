@@ -28,12 +28,15 @@ public class WeatherDataLoader {
 			// Look in this directory only with a depth of one
 			Files.walk(sourceDir, 1).filter(f -> f.toString().endsWith(".csv")).forEach(p -> monthFiles.add(p));
 			
+			DayFormat dayFormat = DayFormat.valueOf("D9MET");
+			
 			// Summarise monthly weather statistics and print
-			List<MonthStatistics> monthStats = calculateMonthStatistics(monthFiles);
+			List<MonthStatistics> monthStats = calculateMonthStatistics(monthFiles, dayFormat);
 			printStats(monthStats);
 			
 			// Write data to a file
-			writeDailyStats(monthStats, Paths.get("/Users/ryland/Documents/Java/weather-data/Output"));
+			if (args[1] == "true")
+				writeDailyStats(monthStats, Paths.get("/Users/ryland/Documents/Java/weather-data/Output"));
 		}
 	}
 	
@@ -63,13 +66,23 @@ public class WeatherDataLoader {
 	 * Get summary statistics for an input list of data files
 	 * @param files - CSV files as exported from Netatmo
 	 */
-	public static List<MonthStatistics> calculateMonthStatistics(List<Path> files) {
+	public static List<MonthStatistics> calculateMonthStatistics(List<Path> files, DayFormat dayFormat) {
+		List<Map<Integer, List<Reading>>> groupedReadings = new ArrayList<Map<Integer, List<Reading>>>();
 		List<MonthStatistics> monthStats = new ArrayList<MonthStatistics>();
 		
-		// For each file, get the data as Reading objects, then calculate statistics
+		// For each file, get the data as Reading objects grouped by the file they arrived in
 		files.forEach(f -> { List<Reading> r = readMonthData(f); 
-		MonthStatistics s = getMonthStatistics(r);
-		monthStats.add(s);});
+			Map<Integer, List<Reading>> readingsByDay = groupReadingsByDay(r, dayFormat);
+			groupedReadings.add(readingsByDay);
+		});
+		
+		// Reconcile months, if using meteorological mode - the first of the month contains some data belonging to the end of the previous month
+		
+		// Calculate statistics for each month
+		groupedReadings.forEach(g -> {
+			MonthStatistics s = getMonthStatistics(g);
+			monthStats.add(s);
+		});
 		
 		return monthStats;
 	}
@@ -119,28 +132,49 @@ public class WeatherDataLoader {
 	}
 	
 	/**
+	 * Group readings by the day in the month they occurred on - used for working out lower-level statistics
+	 * @param readings - a list of Reading objects belonging to one month (not checked)
+	 * @param dayFormat - setting for whether readings should be grouped to 24-hour day or meteorological day
+	 * @return
+	 */
+	public static Map<Integer, List<Reading>> groupReadingsByDay(List<Reading> readings, DayFormat dayFormat) {
+		// Group readings by the day in the month they occurred on - used for working out lower-level statistics
+		// within a day, e.g. the day's high temperature
+		Map<Integer, List<Reading>> readingsByDay = getReadingsByDay(readings, dayFormat);
+		return readingsByDay;
+	}
+	
+	/**
 	 * Get top-level statistics for a list of weather station readings
 	 * Assumption that the input readings are from one month - this is not checked (possible enhancement)
 	 * @param readings - a list of Reading objects belonging to one month, to be summarised
 	 * @return a MonthStatistics object representing the top and lower-level weather statistics for the month
 	 */
-	public static MonthStatistics getMonthStatistics(List<Reading> readings) {
+	public static MonthStatistics getMonthStatistics(Map<Integer, List<Reading>> readingsByDay) {
 		// Assumption that readings are from the same month - find out which from a sample Reading
-		Reading sample = readings.stream().findFirst().get();
+		Reading sample = readingsByDay.get(1).stream().findFirst().get();
 		Month month = sample.getTimestamp().getMonth();
 		int year = sample.getTimestamp().getYear();
 		
-		// Group readings by the day in the month they occurred on - used for working out lower-level statistics
-		// within a day, e.g. the day's high temperature
-		Map<Integer, List<Reading>> readingsByDay = getReadingsByDay(readings);
+		List<Reading> allReadings = new ArrayList<Reading>();
+
+		readingsByDay.forEach((i, lr) -> {allReadings.addAll(lr);});
 		
 		// Create a MonthStatistics by passing in top-level calculations for the readings
-		MonthStatistics stats = new MonthStatistics(getLowestTemp(readings), getHighestTemp(readings),
-				getAverageTemp(readings), getHighTemps(readingsByDay), getLowTemps(readingsByDay),
-				getLowestHumidity(readings), getHighestHumidity(readings), getAverageHumidity(readings),
+		MonthStatistics stats = new MonthStatistics(getLowestTemp(allReadings), getHighestTemp(allReadings),
+				getAverageTemp(allReadings), getHighTemps(readingsByDay), getLowTemps(readingsByDay),
+				getLowestHumidity(allReadings), getHighestHumidity(allReadings), getAverageHumidity(allReadings),
 				month, year);
 		
 		return stats;
+	}
+	
+	public static void reconcileMonths(List<Map<Integer, List<Reading>>> groupedReadings) {
+		// For each map of days and associated readings
+		// Find readings from the first day before 10am
+		// Find the map for the previous month
+		// Add the required readings to this month
+		// Remove them from the month after
 	}
 	
 	/**
@@ -240,9 +274,16 @@ public class WeatherDataLoader {
 	 * @param readings - a list of input readings over any time period
 	 * @return a Map containing integer days of month (assumption of input being a single month) with their readings
 	 */
-	public static Map<Integer, List<Reading>> getReadingsByDay(List<Reading> readings) {
+	public static Map<Integer, List<Reading>> getReadingsByDay(List<Reading> readings, DayFormat dayFormat) {
 		// Group input readings by the day of the month on which they occurred
-		return readings.stream().collect(Collectors.groupingBy(Reading::getDay));
+		switch(dayFormat) {
+			case D24HOUR:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getDay));
+			case D9MET:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getMetDay));
+			default:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getDay));
+		}
 	}
 	
 	/**
