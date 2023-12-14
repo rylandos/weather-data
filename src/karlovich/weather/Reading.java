@@ -31,6 +31,14 @@ public class Reading{
 		return timestamp.getDayOfMonth();
 	}
 	
+	public int getMonth() {
+		return timestamp.getMonthValue();
+	}
+	
+	public int getYear() {
+		return timestamp.getYear();
+	}
+	
 	public int getMetDay() {
 		if (timestamp.getHour() < 10) {
 			// Consider this reading to be part of the previous meteorological day, likely containing the overnight low
@@ -38,6 +46,26 @@ public class Reading{
 		}
 		else {
 			return getDay();
+		}
+	}
+	
+	public int getMetMonth() {
+		if (timestamp.getHour() < 10) {
+			// Consider this reading to be part of the previous meteorological day, likely containing the overnight low
+			return timestamp.minusDays(1).getMonthValue();
+		}
+		else {
+			return getMonth();
+		}
+	}
+	
+	public int getMetYear() {
+		if (timestamp.getHour() < 10) {
+			// Consider this reading to be part of the previous meteorological day, likely containing the overnight low
+			return timestamp.minusDays(1).getYear();
+		}
+		else {
+			return getYear();
 		}
 	}
 	

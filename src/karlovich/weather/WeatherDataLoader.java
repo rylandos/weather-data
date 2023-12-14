@@ -67,22 +67,39 @@ public class WeatherDataLoader {
 	 * @param files - CSV files as exported from Netatmo
 	 */
 	public static List<MonthStatistics> calculateMonthStatistics(List<Path> files, DayFormat dayFormat) {
-		List<Map<Integer, List<Reading>>> groupedReadings = new ArrayList<Map<Integer, List<Reading>>>();
+		List<Reading> allReadings = new ArrayList<Reading>();
+		//Map<Integer, List<Reading>> readingsByYear = new HashMap<Integer, List<Reading>>();
+		
+		//List<Map<Integer, List<Reading>>> groupedReadings = new ArrayList<Map<Integer, List<Reading>>>();
 		List<MonthStatistics> monthStats = new ArrayList<MonthStatistics>();
 		
 		// For each file, get the data as Reading objects grouped by the file they arrived in
-		files.forEach(f -> { List<Reading> r = readMonthData(f); 
-			Map<Integer, List<Reading>> readingsByDay = groupReadingsByDay(r, dayFormat);
-			groupedReadings.add(readingsByDay);
+		files.forEach(f -> { List<Reading> r = readMonthData(f);
+			allReadings.addAll(r);
+			//Map<Integer, List<Reading>> readingsByDay = groupReadingsByDay(r, dayFormat);
+			//groupedReadings.add(readingsByDay);
 		});
+		
+		Map<Integer, List<Reading>> readingsByYear = getReadingsByYear(allReadings, dayFormat);
+		readingsByYear.forEach((y, lyr) -> {
+			Map<Integer, List<Reading>> readingsByMonth = getReadingsByMonth(lyr, dayFormat);
+			readingsByMonth.forEach((m, lmr) -> {
+				Map<Integer, List<Reading>> readingsByDay = groupReadingsByDay(lmr, dayFormat);
+				MonthStatistics s = getMonthStatistics(readingsByDay, dayFormat);
+				monthStats.add(s);
+			});
+			
+		}) ;
 		
 		// Reconcile months, if using meteorological mode - the first of the month contains some data belonging to the end of the previous month
 		
-		// Calculate statistics for each month
+		// Calculate statistics for each month - these should already be grouped into the correct year and month
+		/*
 		groupedReadings.forEach(g -> {
 			MonthStatistics s = getMonthStatistics(g);
 			monthStats.add(s);
 		});
+		*/
 		
 		return monthStats;
 	}
@@ -150,11 +167,27 @@ public class WeatherDataLoader {
 	 * @param readings - a list of Reading objects belonging to one month, to be summarised
 	 * @return a MonthStatistics object representing the top and lower-level weather statistics for the month
 	 */
-	public static MonthStatistics getMonthStatistics(Map<Integer, List<Reading>> readingsByDay) {
+	public static MonthStatistics getMonthStatistics(Map<Integer, List<Reading>> readingsByDay, DayFormat dayFormat) {
 		// Assumption that readings are from the same month - find out which from a sample Reading
-		Reading sample = readingsByDay.get(1).stream().findFirst().get();
-		Month month = sample.getTimestamp().getMonth();
-		int year = sample.getTimestamp().getYear();
+		Reading sample = readingsByDay.values().stream().findFirst().get().stream().findFirst().get();
+		
+		Month month = null;
+		int year = 0;
+		
+		switch(dayFormat) {
+		case D24HOUR:
+			month = Month.of(sample.getMonth());
+			year = sample.getYear();
+			break;
+		case D9MET:
+			month = Month.of(sample.getMetMonth());
+			year = sample.getMetYear();
+			break;
+		default:
+			month = Month.of(sample.getMonth());
+			year = sample.getYear();
+			break;
+		}
 		
 		List<Reading> allReadings = new ArrayList<Reading>();
 
@@ -283,6 +316,30 @@ public class WeatherDataLoader {
 				return readings.stream().collect(Collectors.groupingBy(Reading::getMetDay));
 			default:
 				return readings.stream().collect(Collectors.groupingBy(Reading::getDay));
+		}
+	}
+	
+	public static Map<Integer, List<Reading>> getReadingsByYear(List<Reading> readings, DayFormat dayFormat) {
+		// Group input readings by the day of the month on which they occurred
+		switch(dayFormat) {
+			case D24HOUR:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getYear));
+			case D9MET:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getMetYear));
+			default:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getYear));
+		}
+	}
+	
+	public static Map<Integer, List<Reading>> getReadingsByMonth(List<Reading> readings, DayFormat dayFormat) {
+		// Group input readings by the day of the month on which they occurred
+		switch(dayFormat) {
+			case D24HOUR:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getMonth));
+			case D9MET:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getMetMonth));
+			default:
+				return readings.stream().collect(Collectors.groupingBy(Reading::getMonth));
 		}
 	}
 	
